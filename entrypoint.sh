@@ -1,26 +1,31 @@
 #!/bin/sh
-
 set -e
 
+echo "Setting up SSH directory"
 SSH_PATH="$HOME/.ssh"
-DEPLOY_BRANCH="${BRANCH-master}"
-
 mkdir -p "$SSH_PATH"
-touch "$SSH_PATH/known_hosts"
-
-echo "$PRIVATE_KEY" > "$SSH_PATH/deploy_key"
-echo "$PUBLIC_KEY" > "$SSH_PATH/deploy_key.pub"
-
 chmod 700 "$SSH_PATH"
-chmod 600 "$SSH_PATH/known_hosts"
+
+echo "Saving SSH key"
+echo "$PRIVATE_KEY" > "$SSH_PATH/deploy_key"
 chmod 600 "$SSH_PATH/deploy_key"
-chmod 600 "$SSH_PATH/deploy_key.pub"
 
-eval $(ssh-agent)
-ssh-add "$SSH_PATH/deploy_key"
+GIT_COMMAND="git push dokku@$HOST:$PROJECT HEAD:master"
+if [ -n "$FORCE_DEPLOY" ]; then
+    echo "Enabling force deploy"
+    GIT_COMMAND="$GIT_COMMAND --force"
+fi
 
-ssh-keyscan -t rsa $HOST >> "$SSH_PATH/known_hosts"
+GIT_SSH_COMMAND="ssh -p ${PORT-22} -i $SSH_PATH/deploy_key"
+if [ -n "$HOST_KEY" ]; then
+    echo "Adding hosts key to known_hosts"
+    echo "$HOST_KEY" >> "$SSH_PATH/known_hosts"
+    chmod 600 "$SSH_PATH/known_hosts"
+else
+    echo "Disabling host key checking"
+    GIT_SSH_COMMAND="$GIT_SSH_COMMAND -o StrictHostKeyChecking=no"
+fi
 
-git checkout $DEPLOY_BRANCH
+echo "The deploy is starting"
 
-GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no" git push dokku@$HOST:$PROJECT $DEPLOY_BRANCH:master
+GIT_SSH_COMMAND="$GIT_SSH_COMMAND" $GIT_COMMAND
